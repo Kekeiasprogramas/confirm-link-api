@@ -41,11 +41,12 @@ HTML = """
 <!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <title>Confirmação</title>
 <style>
-body{font-family:sans-serif;max-width:520px;margin:40px auto;padding:0 16px}
-a.btn{display:block;padding:14px 16px;margin:12px 0;text-align:center;text-decoration:none;border-radius:10px}
-.btn-ok{background:#16a34a;color:#fff}.btn-no{background:#ef4444;color:#fff}
-.box{background:#f1f5f9;border-radius:12px;padding:14px}
-small{color:#64748b}
+body{{font-family:sans-serif;max-width:520px;margin:40px auto;padding:0 16px}}
+a.btn{{display:block;padding:14px 16px;margin:12px 0;text-align:center;text-decoration:none;border-radius:10px}}
+.btn-ok{{background:#16a34a;color:#fff}}
+.btn-no{{background:#ef4444;color:#fff}}
+.box{{background:#f1f5f9;border-radius:12px;padding:14px}}
+small{{color:#64748b}}
 </style></head><body>
 <h2>Confirmar agendamento</h2>
 <div class="box"><p>Olá {nome}, confirme sua consulta em {dh}.</p></div>
