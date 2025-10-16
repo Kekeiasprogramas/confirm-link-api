@@ -1,13 +1,23 @@
-import hmac, hashlib, sqlite3, time, os
+# confirm_api.py — SQLite + Webhook callback
+import os, time, hmac, hashlib, json, sqlite3, requests
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
+# ── Config ────────────────────────────────────────────────────────────────────
 SECRET = (os.getenv("CONFIRM_SECRET") or "troque-esta-chave-super-secreta").encode()
+
+# Banco local do seu app (ajuste se o caminho for diferente)
 DBPATH = os.getenv("DBPATH", "app/bluepink/app.db")
 
+# Webhook (se preencher, o clique CONFIRMAR/NAO vai chamar essa URL)
+CALLBACK_URL = os.getenv("CALLBACK_URL")  # ex.: https://seu-tunel.trycloudflare.com/callback/confirm
+CALLBACK_SECRET = (os.getenv("CALLBACK_SECRET") or "troque-esta-chave").encode()
+
+# ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI()
 
 def db():
+    """Abre o SQLite e garante a tabela/colunas necessárias."""
     os.makedirs(os.path.dirname(DBPATH), exist_ok=True)
     con = sqlite3.connect(DBPATH, check_same_thread=False)
     con.execute("""
@@ -21,7 +31,7 @@ def db():
             expires_at INTEGER
         )
     """)
-    # garante colunas caso a tabela já existisse
+    # garante colunas se a tabela já existia
     for col, typ, default in [
         ("status", "TEXT", "'aguardando'"),
         ("sig_salt", "TEXT", "NULL"),
@@ -56,6 +66,7 @@ small{{color:#64748b}}
 </body></html>
 """
 
+# ── Rotas ─────────────────────────────────────────────────────────────────────
 @app.get("/health", response_class=PlainTextResponse)
 def health():
     return "ok"
@@ -76,10 +87,11 @@ def show(ag_id: int, sig: str):
         raise HTTPException(403, "Assinatura inválida")
     return HTML.format(nome=nome, dh=dh, ag_id=ag_id, sig=sig)
 
-@app.get("/do/{ag_id}/{action}")
+@app.get("/do/{ag_id}/{action}", response_class=HTMLResponse)
 def decide(ag_id: int, action: str, sig: str):
     if action not in ("ok", "no"):
         raise HTTPException(400, "Ação inválida")
+
     con = db(); cur = con.cursor()
     row = cur.execute(
         "SELECT IFNULL(sig_salt,''), IFNULL(expires_at,0) FROM agenda WHERE id=?", (ag_id,)
@@ -95,11 +107,23 @@ def decide(ag_id: int, action: str, sig: str):
     novo = "confirmado" if action == "ok" else "nao_confirmado"
     cur.execute("UPDATE agenda SET status=? WHERE id=?", (novo, ag_id))
     con.commit()
+
+    # ── Notifica seu sistema (webhook) ──
+    if CALLBACK_URL:
+        payload = {"id": ag_id, "status": novo, "ts": int(time.time())}
+        raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
+        sig2 = hmac.new(CALLBACK_SECRET, raw, hashlib.sha256).hexdigest()
+        try:
+            requests.post(CALLBACK_URL, json={**payload, "sig": sig2}, timeout=8)
+        except Exception:
+            # não quebra a confirmação se o callback falhar
+            pass
+
     return HTMLResponse("<h2>Pronto! Obrigado. Pode fechar esta página.</h2>")
 
-# ---------- utilidades pra testar e integrar ----------
-
+# ── Utilidades (seed/status) ──────────────────────────────────────────────────
 @app.post("/seed")
+@app.get("/seed")
 def seed(
     nome: str = Query("Cliente Teste"),
     phone: str = Query("5535999999999"),
